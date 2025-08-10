@@ -1,0 +1,551 @@
+#include "AuthManager.h"
+#include <fstream>
+#include <sstream>
+#include <iostream>
+
+AuthManager::AuthManager(const std::string& usersFile) : usersFile(usersFile) {}
+
+bool AuthManager::login() {
+    std::string username, password;
+    std::cout << "Логін: ";
+    if (!(std::cin >> username)) return false;
+    std::cout << "Пароль: ";
+    if (!(std::cin >> password)) return false;
+    if (validateCredentials(username, password)) {
+        currentUser = username;
+        return true;
+    }
+    return false;
+}
+
+std::string AuthManager::getCurrentUser() const { return currentUser; }
+bool AuthManager::isAdmin() const { return currentUser == "admin"; }
+
+bool AuthManager::validateCredentials(const std::string& login, const std::string& password) const {
+    std::ifstream file(usersFile);
+    if (!file) {
+        std::cerr << "Не вдалося відкрити файл користувачів: " << usersFile << "\n";
+        return false;
+    }
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.empty()) continue;
+        std::istringstream iss(line);
+        std::string u, p;
+        if (std::getline(iss, u, ':') && std::getline(iss, p)) {
+            if (u == login && p == password) return true;
+        }
+    }
+    return false;
+}
+
+std::vector<std::string> AuthManager::listUsers() const {
+    std::vector<std::string> out;
+    std::ifstream file(usersFile);
+    if (!file) return out;
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.empty()) continue;
+        auto pos = line.find(':');
+        if (pos != std::string::npos) out.push_back(line.substr(0, pos));
+    }
+    return out;
+}
+
+bool AuthManager::addUser(const std::string& username, const std::string& password) {
+    auto users = listUsers();
+    for (auto& u : users) if (u == username) return false;
+    std::ofstream file(usersFile, std::ios::app);
+    if (!file) return false;
+    file << username << ':' << password << '\n';
+    return true;
+}
+
+bool AuthManager::deleteUser(const std::string& username) {
+    if (username == "admin") return false;
+    std::ifstream file(usersFile);
+    if (!file) return false;
+    std::vector<std::string> lines;
+    std::string line;
+    bool found = false;
+    while (std::getline(file, line)) {
+        if (line.empty()) continue;
+        auto pos = line.find(':');
+        if (pos != std::string::npos) {
+            std::string u = line.substr(0, pos);
+            if (u == username) { found = true; continue; }
+        }
+        lines.push_back(line);
+    }
+    file.close();
+    std::ofstream out(usersFile, std::ios::trunc);
+    if (!out) return false;
+    for (auto& l : lines) out << l << '\n';
+    return found;
+}
+
+#pragma once
+#include <string>
+#include <vector>
+
+class AuthManager {
+public:
+    AuthManager(const std::string& usersFile = "data/users.txt");
+    bool login();
+    std::string getCurrentUser() const;
+    bool isAdmin() const;
+
+    // admin operations
+    std::vector<std::string> listUsers() const;
+    bool addUser(const std::string& username, const std::string& password);
+    bool deleteUser(const std::string& username);
+
+private:
+    std::string usersFile;
+    std::string currentUser;
+    bool validateCredentials(const std::string& login, const std::string& password) const;
+};
+
+#include "CityTour.h"
+#include <sstream>
+#include <iostream>
+
+// expected CSV order:
+// country,city,accommodation,transport,departureDate,returnDate,hotelLevel,food,extras,price
+
+CityTour::CityTour(const std::string& csvLine) {
+    std::istringstream iss(csvLine);
+    std::string token;
+    std::getline(iss, country, ',');
+    std::getline(iss, city, ',');
+    std::getline(iss, accommodation, ',');
+    std::getline(iss, transport, ',');
+    std::getline(iss, departureDate, ',');
+    std::getline(iss, returnDate, ',');
+    std::getline(iss, hotelLevel, ',');
+    std::getline(iss, food, ',');
+    std::getline(iss, extras, ',');
+    if (std::getline(iss, token)) {
+        try { price = std::stod(token); } catch(...) { price = 0.0; }
+    }
+}
+
+void CityTour::input() {
+    std::cout << "Країна: "; std::getline(std::cin >> std::ws, country);
+    std::cout << "Місто: "; std::getline(std::cin, city);
+    std::cout << "Умови проживання: "; std::getline(std::cin, accommodation);
+    std::cout << "Транспорт: "; std::getline(std::cin, transport);
+    std::cout << "Дата відправлення (YYYY-MM-DD): "; std::getline(std::cin, departureDate);
+    std::cout << "Дата повернення (YYYY-MM-DD): "; std::getline(std::cin, returnDate);
+    std::cout << "Рівень готелю: "; std::getline(std::cin, hotelLevel);
+    std::cout << "Харчування: "; std::getline(std::cin, food);
+    std::cout << "Додаткові вигоди: "; std::getline(std::cin, extras);
+    std::cout << "Вартість путівки: "; std::string p; std::getline(std::cin, p);
+    try { price = std::stod(p); } catch(...) { price = 0.0; }
+}
+
+void CityTour::display() const {
+    std::cout << country << ", " << city << " | " << departureDate << " -> " << returnDate
+              << " | " << hotelLevel << "* | " << price << " грн\n";
+}
+
+std::string CityTour::toCSV() const {
+    std::ostringstream oss;
+    oss << country << ',' << city << ',' << accommodation << ',' << transport << ','
+        << departureDate << ',' << returnDate << ',' << hotelLevel << ',' << food << ','
+        << extras << ',' << price;
+    return oss.str();
+}
+
+std::string CityTour::getCountry() const { return country; }
+std::string CityTour::getCity() const { return city; }
+std::string CityTour::getDepartureDate() const { return departureDate; }
+std::string CityTour::getReturnDate() const { return returnDate; }
+double CityTour::getPrice() const { return price; }
+std::string CityTour::getHotelLevel() const { return hotelLevel; }
+
+void CityTour::editInteractive() {
+    std::cout << "Редагування туру. Залиште поле порожнім, щоб не змінювати.\n";
+    std::string tmp;
+    std::cout << "Країна (" << country << "): "; std::getline(std::cin >> std::ws, tmp); if (!tmp.empty()) country = tmp;
+    std::cout << "Місто (" << city << "): "; std::getline(std::cin, tmp); if (!tmp.empty()) city = tmp;
+    std::cout << "Умови проживання (" << accommodation << "): "; std::getline(std::cin, tmp); if (!tmp.empty()) accommodation = tmp;
+    std::cout << "Транспорт (" << transport << "): "; std::getline(std::cin, tmp); if (!tmp.empty()) transport = tmp;
+    std::cout << "Дата відправлення (" << departureDate << "): "; std::getline(std::cin, tmp); if (!tmp.empty()) departureDate = tmp;
+    std::cout << "Дата повернення (" << returnDate << "): "; std::getline(std::cin, tmp); if (!tmp.empty()) returnDate = tmp;
+    std::cout << "Рівень готелю (" << hotelLevel << "): "; std::getline(std::cin, tmp); if (!tmp.empty()) hotelLevel = tmp;
+    std::cout << "Харчування (" << food << "): "; std::getline(std::cin, tmp); if (!tmp.empty()) food = tmp;
+    std::cout << "Додаткові вигоди (" << extras << "): "; std::getline(std::cin, tmp); if (!tmp.empty()) extras = tmp;
+    std::cout << "Вартість (" << price << "): "; std::getline(std::cin, tmp);
+    if (!tmp.empty()) {
+        try { price = std::stod(tmp); } catch(...) {}
+    }
+}
+
+#pragma once
+#include "Tour.h"
+#include <string>
+
+class CityTour : public Tour {
+private:
+    std::string country;
+    std::string city;
+    std::string accommodation;
+    std::string transport;
+    std::string departureDate;
+    std::string returnDate;
+    std::string hotelLevel;
+    std::string food;
+    std::string extras;
+    double price = 0.0;
+public:
+    CityTour() = default;
+    CityTour(const std::string& csvLine);
+    void input() override;
+    void display() const override;
+    std::string toCSV() const override;
+    std::string getCountry() const override;
+    std::string getCity() const override;
+    std::string getDepartureDate() const override;
+    std::string getReturnDate() const override;
+    double getPrice() const override;
+    std::string getHotelLevel() const override;
+    void editInteractive() override;
+};
+
+
+#include <iostream>
+#include <locale>
+#include "AuthManager.h"
+#include "TourManager.h"
+#include <limits>
+#include <windows.h>
+
+int main() {
+
+    SetConsoleCP(CP_UTF8);
+    SetConsoleOutputCP(CP_UTF8);
+    std::setlocale(LC_ALL, ".UTF8");
+    AuthManager auth("data/users.txt");
+    if (!auth.login()) {
+        std::cout << "Невдала авторизація. Вихід...\n";
+        return 1;
+    }
+    std::cout << "Ласкаво просимо, " << auth.getCurrentUser() << "!\n";
+    if (auth.isAdmin()) {
+        std::cout << "Ви увійшли як admin.\n";
+        // simple admin console for user management
+        bool done = false;
+        while (!done) {
+            std::cout << "\n--- Адмін меню ---\n"
+                         "1) Керувати турами\n"
+                         "2) Список користувачів\n"
+                         "3) Додати користувача\n"
+                         "4) Видалити користувача\n"
+                         "0) Продовжити як користувач\n"
+                         "Вибір: ";
+            int c;
+            if (!(std::cin >> c)) break;
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            if (c == 1) {
+                TourManager mgr;
+                mgr.mainMenu();
+            }
+            else if (c == 2) {
+                auto users = auth.listUsers();
+                std::cout << "Зареєстровані користувачі:\n";
+                for (auto& u : users) std::cout << " - " << u << "\n";
+            }
+            else if (c == 3) {
+                std::string u, p;
+                std::cout << "Новий логін: "; std::cin >> u;
+                std::cout << "Пароль: "; std::cin >> p;
+                if (auth.addUser(u, p))
+                    std::cout << "Користувача додано\n";
+                else
+                    std::cout << "Не вдалося (можливо такий логін існує)\n";
+            }
+            else if (c == 4) {
+                std::string u;
+                std::cout << "Логін для видалення: "; std::cin >> u;
+                if (auth.deleteUser(u))
+                    std::cout << "Користувача видалено\n";
+                else
+                    std::cout << "Не вдалося видалити (можливо не існує або admin)\n";
+            }
+            else done = true;
+        }
+    } else {
+        TourManager mgr;
+        mgr.mainMenu();
+    }
+    return 0;
+}
+
+
+
+#pragma once
+#include <string>
+
+class Tour {
+public:
+    virtual ~Tour() = default;
+    virtual void input() = 0;
+    virtual void display() const = 0;
+    virtual std::string toCSV() const = 0;
+    virtual std::string getCountry() const = 0;
+    virtual std::string getCity() const = 0;
+    virtual std::string getDepartureDate() const = 0;
+    virtual std::string getReturnDate() const = 0;
+    virtual double getPrice() const = 0;
+    virtual std::string getHotelLevel() const = 0;
+    virtual void editInteractive() = 0;
+};
+
+#include "TourManager.h"
+#include "CityTour.h"
+#include <fstream>
+#include <sstream>
+#include <iostream>
+#include <algorithm>
+#include <limits>
+
+TourManager::TourManager(const std::string& dataFile) : dataFile(dataFile) {}
+
+void TourManager::load() {
+    tours.clear();
+    std::ifstream file(dataFile);
+    if (!file) {
+        std::cerr << "Не вдалося відкрити файл турів: " << dataFile << "\n";
+        return;
+    }
+    std::string header;
+    if (!std::getline(file, header)) return;
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.empty()) continue;
+        tours.push_back(std::make_shared<CityTour>(line));
+    }
+}
+
+void TourManager::save() const {
+    std::ofstream file(dataFile, std::ios::trunc);
+    if (!file) {
+        std::cerr << "Не вдалося відкрити файл на запис: " << dataFile << "\n";
+        return;
+    }
+    // header
+    file << "country,city,accommodation,transport,departureDate,returnDate,hotelLevel,food,extras,price\n";
+    for (auto& t : tours) file << t->toCSV() << "\n";
+}
+
+void TourManager::mainMenu() {
+    load();
+    int choice;
+    do {
+        std::cout << "\n=== ГОЛОВНЕ МЕНЮ ТУРІВ ===\n";
+        std::cout << "1. Переглянути всі тури\n";
+        std::cout << "2. Додати тур\n";
+        std::cout << "3. Пошук турів\n";
+        std::cout << "4. Сортування\n";
+        std::cout << "5. Фільтрація\n";
+        std::cout << "6. Редагувати тур\n";
+        std::cout << "7. Видалити тур\n";
+        std::cout << "8. Зберегти у файл\n";
+        std::cout << "0. Вихід\n";
+        std::cout << "Вибір: ";
+        if (!(std::cin >> choice)) break;
+        switch (choice) {
+        case 1: displayAll(); break;
+        case 2: addTour(); break;
+        case 3: searchMenu(); break;
+        case 4: sortMenu(); break;
+        case 5: filterMenu(); break;
+        case 6: editTour(); break;
+        case 7: deleteTour(); break;
+        case 8: save(); std::cout << "Збережено.\n"; break;
+        case 0: save(); std::cout << "Вихід. Збережено.\n"; break;
+        default: std::cout << "Невірний вибір\n";
+        }
+    } while (choice != 0);
+}
+
+void TourManager::displayAll() const {
+    if (tours.empty()) { std::cout << "Немає турів.\n"; return; }
+    int i = 0;
+    for (auto& t : tours) {
+        std::cout << i++ << ") ";
+        t->display();
+    }
+}
+
+void TourManager::addTour() {
+    auto t = std::make_shared<CityTour>();
+    t->input();
+    tours.push_back(t);
+    std::cout << "Тур додано у пам'ять. Для збереження оберіть пункт 'Зберегти у файл' або вийдіть (дані будуть збережені).\n";
+}
+
+void TourManager::searchMenu() const {
+    std::cout << "Пошук за: 1) країна 2) місто 3) дата (в межах)\nВаш вибір: ";
+    int c; std::cin >> c;
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    if (c == 1) {
+        std::string q; std::cout << "Країна: "; std::getline(std::cin, q);
+        int i = 0;
+        for (auto& t : tours) {
+            if (t->getCountry() == q) { std::cout << i << ") "; t->display(); }
+            ++i;
+        }
+    }
+    else if (c == 2) {
+        std::string q; std::cout << "Місто: "; std::getline(std::cin, q);
+        int i = 0;
+        for (auto& t : tours) {
+            if (t->getCity() == q) { std::cout << i << ") "; t->display(); }
+            ++i;
+        }
+    }
+    else if (c == 3) {
+        std::string from, to; std::cout << "Від (YYYY-MM-DD): "; std::getline(std::cin, from);
+        std::cout << "До (YYYY-MM-DD): "; std::getline(std::cin, to);
+        int i = 0;
+        for (auto& t : tours) {
+            auto d = t->getDepartureDate();
+            if (dateInRange(d, from, to)) {
+                std::cout << i << ") ";
+                t->display();
+            }
+            ++i;
+        }
+    }
+    else {
+        std::cout << "Невідомо\n";
+    }
+}
+
+void TourManager::sortMenu() {
+    std::cout << "Сортувати за: 1) ціною 2) датою відправлення\nВибір: ";
+    int c; std::cin >> c;
+    if (c == 1) {
+        std::sort(tours.begin(), tours.end(), [](auto& a, auto& b) { return a->getPrice() < b->getPrice(); });
+        std::cout << "Відсортовано за ціною.\n";
+        displayAll();
+    }
+    else if (c == 2) {
+        std::sort(tours.begin(), tours.end(), [](auto& a, auto& b) { return a->getDepartureDate() < b->getDepartureDate(); });
+        std::cout << "Відсортовано за датою відправлення.\n";
+        displayAll();
+    }
+    else std::cout << "Невірно\n";
+}
+
+void TourManager::filterMenu() const {
+    std::cout << "Фільтрувати за: 1) рівень готелю 2) макс ціна\nВибір: ";
+    int c; std::cin >> c;
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    if (c == 1) {
+        std::string lvl; std::cout << "Рівень готелю (наприклад 3 або 4): "; std::getline(std::cin, lvl);
+        int i = 0;
+        for (auto& t : tours) {
+            if (t->getHotelLevel() == lvl) {
+                std::cout << i << ") "; t->display();
+            }
+            ++i;
+        }
+    }
+    else if (c == 2) {
+        std::string s;
+        std::cout << "Макс ціна: ";
+        std::getline(std::cin, s);
+        double mx = 0;
+        try {
+            mx = std::stod(s);
+        } catch (...) {
+            mx = 0;
+        }
+        int i = 0;
+        for (auto& t : tours) {
+            if (t->getPrice() <= mx) {
+                std::cout << i << ") ";
+                t->display();
+            }
+            ++i;
+        }
+    }
+    else {
+        std::cout << "Невірно\n";
+    }
+}
+
+void TourManager::editTour() {
+    displayAll();
+    std::cout << "Введіть індекс туру для редагування: ";
+    int idx;
+    if (!(std::cin >> idx)) {
+        std::cout << "Невірний індекс\n";
+        std::cin.clear();
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        return;
+    }
+    if (idx < 0 || idx >= static_cast<int>(tours.size())) {
+        std::cout << "Індекс за межами\n";
+        return;
+    }
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    tours[idx]->editInteractive();
+    std::cout << "Тур оновлено в пам'яті. Не забудьте зберегти у файл.\n";
+}
+
+void TourManager::deleteTour() {
+    displayAll();
+    std::cout << "Введіть індекс туру для видалення: ";
+    int idx;
+    if (!(std::cin >> idx)) {
+        std::cout << "Невірний індекс\n";
+        std::cin.clear();
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        return;
+    }
+    if (idx < 0 || idx >= static_cast<int>(tours.size())) {
+        std::cout << "Індекс за межами\n";
+        return;
+    }
+    tours.erase(tours.begin() + idx);
+    std::cout << "Тур видалено (пам'ять). Не забудьте зберегти у файл.\n";
+}
+
+bool TourManager::dateInRange(const std::string& date, const std::string& from, const std::string& to) {
+    if (from.empty() && to.empty()) return true;
+    if (!from.empty() && date < from) return false;
+    if (!to.empty() && date > to) return false;
+    return true;
+}
+
+#pragma once
+#include "Tour.h"
+#include <vector>
+#include <memory>
+#include <string>
+
+class TourManager {
+public:
+    TourManager(const std::string& dataFile = "data/tours.csv");
+    void load();
+    void save() const;
+    void mainMenu();
+private:
+    std::string dataFile;
+    std::vector<std::shared_ptr<Tour>> tours;
+
+    void displayAll() const;
+    void addTour();
+    void searchMenu() const;
+    void sortMenu();
+    void filterMenu() const;
+    void editTour();
+    void deleteTour();
+    static bool dateInRange(const std::string& date, const std::string& from, const std::string& to);
+};
+
+
